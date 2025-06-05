@@ -1,13 +1,18 @@
 # src/data/dataset.py
 from typing import Dict, List, Optional
 import logging
+import json
+import os
 
 import torch
 from datasets import load_dataset
 from torch.utils.data import Dataset
-from transformers import PreTrainedTokenizer
-from config import PromptConfig
+from transformers import PreTrainedTokenizer, AutoTokenizer
 
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from config import PromptConfig
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +28,8 @@ class CausalLMMultipleChoiceDataset(Dataset):
         tokenizer: PreTrainedTokenizer,
         prompt_config: PromptConfig,
         max_length: int = 512,
-        split: str = "all",
+        split: str = "train",
+        data_dir: Optional[str] = None,
         **kwargs,
     ):
         del kwargs
@@ -34,7 +40,18 @@ class CausalLMMultipleChoiceDataset(Dataset):
         self.train = split != "validation"
 
         # Load dataset
-        if dataset_name == "lmms-lab/ScienceQA":
+        if dataset_name == "isc_llm_task_dataset":
+            if not data_dir:
+                raise ValueError("data_dir must be provided for isc_llm_task_dataset")
+            data_path = os.path.join(data_dir, f"{split}.jsonl")
+            self.dataset = []
+            if not os.path.exists(data_path):
+                raise FileNotFoundError(f"Preprocessed data not found at {data_path}.")
+            with open(data_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    self.dataset.append(json.loads(line))
+            logging.info(f"Loaded {len(self.dataset)} samples from {data_path}")
+        elif dataset_name == "lmms-lab/ScienceQA":
             self.dataset = load_dataset(
                 dataset_name, "ScienceQA-FULL", split=split, trust_remote_code=True
             )
@@ -57,7 +74,13 @@ class CausalLMMultipleChoiceDataset(Dataset):
         self.max_prompt_length = max_length - self.max_answer_length
 
     def _format_prompt(self, example: Dict) -> str:
-        if self.dataset_name == "cosmos_qa":
+        if self.dataset_name == "isc_llm_task_dataset":
+            context = example["context"]
+            question = example["question"]
+            choices = example["options"]
+            label = example["answer"]
+
+        elif self.dataset_name == "cosmos_qa":
             context = example["context"]
             question = example["question"]
             choices = [
@@ -67,6 +90,7 @@ class CausalLMMultipleChoiceDataset(Dataset):
                 example["answer3"],
             ]
             label = example["label"]
+
         else:  # science_qa
             context = example.get("lecture", "")
             question = example["question"]
@@ -74,10 +98,10 @@ class CausalLMMultipleChoiceDataset(Dataset):
             label = example["answer"]
 
             if example.get("hint"):
-                context = f"{context}\nHint: {example['hint']}"
+                context = f"{context}\\nHint: {example['hint']}"
 
         # Format options
-        options_text = "\n".join(
+        options_text = "\\n".join(
             self.prompt_config.options_format.format(idx=i + 1, choice=choice)
             for i, choice in enumerate(choices)
         )
@@ -208,3 +232,81 @@ def get_data_collator(
     Get the appropriate data collator
     """
     return CausalLMDataCollator(tokenizer, max_length)
+
+if __name__ == "__main__":
+    import argparse
+    from transformers import AutoTokenizer
+
+    logging.basicConfig(level=logging.INFO)
+
+    parser = argparse.ArgumentParser(description="Print formatted prompts from supported datasets.")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        choices=["cosmos_qa", "science_qa", "isc_llm_task_dataset"],
+        default="cosmos_qa",
+        help="Dataset to use (cosmos_qa, science_qa, or isc_llm_task_dataset)",
+    )
+    parser.add_argument(
+        "--num_samples",
+        type=int,
+        default=3,
+        help="Number of samples to print",
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        choices=["train", "validation", "test"],
+        default="train",
+        help="Dataset split to use (e.g., train, validation)",
+    )
+    parser.add_argument(
+        "--token_stats",
+        action="store_true",
+        help="Print token statistics for all splits instead of samples.",
+    )
+    parser.add_argument(
+        "--tokenizer_name",
+        type=str,
+        default="meta-llama/Llama-2-7b-hf",
+        help="Tokenizer to use for token statistics (default: meta-llama/Llama-2-7b-hf)",
+    )
+    args = parser.parse_args()
+
+    # Set up dataset-specific configs
+    if args.dataset == "cosmos_qa":
+        dataset_name = "cosmos_qa"
+        prompt_config = PromptConfig(
+            template="{context}\\nQuestion: {question}\\nOptions:\\n{options}",
+            options_format="{idx}. {choice}"
+        )
+    elif args.dataset == "isc_llm_task_dataset":
+        dataset_name = "isc_llm_task_dataset"
+        prompt_config = PromptConfig() # Pre-formatted, so default is fine
+    else:
+        dataset_name = "lmms-lab/ScienceQA"
+        prompt_config = PromptConfig(
+            template="{context}\\nQuestion: {question}\\nOptions:\\n{options}",
+            options_format="{idx}. {choice}"
+        )
+
+
+    print(f"Loading tokenizer: {args.tokenizer_name}")
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name)
+
+    # Pass data_dir if using the local dataset
+    data_dir_arg = {}
+    if dataset_name == "isc_llm_task_dataset":
+        data_dir_arg["data_dir"] = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "isc_llm_task_dataset")
+
+    print(f"Loading dataset: {dataset_name} (split: {args.split})")
+    dataset = CausalLMMultipleChoiceDataset(
+        dataset_name=dataset_name,
+        tokenizer=tokenizer,
+        prompt_config=prompt_config,
+        max_length=512,
+        split=args.split,
+        **data_dir_arg,
+    )
+    print(f"Finished loading dataset '{dataset_name}/{args.split}'. Final size: {len(dataset)}")
+    dataset.print_formatted_prompts(num_samples=args.num_samples)
