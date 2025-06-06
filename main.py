@@ -116,7 +116,7 @@ def main():
             dataset_name=config.speed_dataset,
             tokenizer=tokenizer,
             prompt_config=config.prompt,
-            split="all",
+            split="train",
             max_length=config.max_length,
         )
     else:
@@ -127,7 +127,7 @@ def main():
             dataset_name=config.accuracy_dataset,
             tokenizer=tokenizer,
             prompt_config=config.prompt,
-            split="test",
+            split="validation",
             max_length=config.max_length,
         )
     else:
