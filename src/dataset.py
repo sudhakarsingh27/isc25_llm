@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_data_dir():
-    return os.environ.get('DATA_DIR', default='compete_dataset')
+    return os.environ.get('DATA_DIR', default='data')
 
 
 class CausalLMMultipleChoiceDataset(Dataset):
@@ -30,7 +30,6 @@ class CausalLMMultipleChoiceDataset(Dataset):
         prompt_config: PromptConfig,
         max_length: int = 512,
         split: str = "all",
-        data_dir: Optional[str] = None,
         **kwargs,
     ):
         del kwargs
@@ -39,15 +38,15 @@ class CausalLMMultipleChoiceDataset(Dataset):
         self.max_length = max_length
         self.prompt_config = prompt_config
         self.train = split != "validation"
-        data_dir = data_dir or get_data_dir()
         logging.info(f"Set self.train={self.train}")
 
         # Load dataset
         if dataset_name in ["speed_dataset", "accuracy_dataset"]:
+            data_dir = get_data_dir()
             if not data_dir:
                 raise ValueError("data_dir must be provided")
             logging.info(f"Loading dataset from directory {data_dir}, ignoring the split={split}")
-            data_path = os.path.join(data_dir, f"{dataset_name.jsonl")
+            data_path = os.path.join(data_dir, f"{dataset_name}.jsonl")
             self.dataset = []
             if not os.path.exists(data_path):
                 raise FileNotFoundError(f"Preprocessed data not found at {data_path}.")
