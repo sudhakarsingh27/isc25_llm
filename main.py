@@ -1,4 +1,6 @@
 import os
+import copy
+from dataclasses import asdict
 import logging
 from argparse import ArgumentParser
 from src.lora_model import LoRAModel
@@ -8,10 +10,13 @@ from src.dataset import load_dataset_for_training
 from src.hub_utils import HFSetup
 from src.evaluation import CausalLMEvaluator
 from config import TrainingConfig, HardwareConfig
+from pprint import pformat
 
 
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+    force=True,
 )
 logger = logging.getLogger(__name__)
 
@@ -64,6 +69,12 @@ def main():
     local_rank = DistributedSetup.setup_distributed(hardware_config)
 
     config = TrainingConfig()
+    config.hardware = hardware_config
+
+    # Mask the sensitive token in the copy
+    config_copy = copy.deepcopy(config)
+    config_copy.cache.hf_token = "hf_secret_token"
+    logger.info("Training Configuration:\n%s", pformat(asdict(config_copy)))
 
     # Setup environment (all ranks need cache dirs, only rank 0 needs auth)
     setup_cache_dir(config, local_rank)
@@ -88,7 +99,6 @@ def main():
     else:
         logger.info("Initializing new model")
         model, tokenizer = model_handler.setup_model(local_rank)
-
 
     DistributedSetup.barrier()
 
@@ -153,4 +163,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

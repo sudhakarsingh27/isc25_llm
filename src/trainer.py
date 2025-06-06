@@ -7,7 +7,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from transformers import Trainer, TrainingArguments
 from .dataset import get_data_collator
 from .evaluation import CausalLMEvaluator
-from peft import get_peft_model_state_dict
+
 
 logger = logging.getLogger(__name__)
 
@@ -80,21 +80,13 @@ class CustomTrainer:
 
         os.makedirs(self.config.checkpoint.dir, exist_ok=True)
 
-        # Save model state
-        checkpoint = {
-            "epoch": epoch,
-            # 'optimizer_state_dict': self.optimizer.state_dict(),
-            # We need these two to verify your submission
-            "lora_state_dict": get_peft_model_state_dict(self.model.module if isinstance(self.model, DDP) else self.model),            
-            "config": self.config,
-        }
-
         # Regular checkpoint
         checkpoint_path = os.path.join(
             self.config.checkpoint.dir, "best_model_lora.pt"
         )
         logger.info("Checkpointing from local_rank = 0 ...")
-        torch.save(checkpoint, checkpoint_path)
+        model = self.model.module if isinstance(self.model, DDP) else self.model
+        model.save_pretrained(checkpoint_path)
 
         # Remove old checkpoints if needed
         self._cleanup_old_checkpoints()
