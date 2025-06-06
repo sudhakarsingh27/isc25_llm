@@ -85,10 +85,10 @@ class TrainingConfig:
     precision: str = "bf16"
     batch_size: int = 8
     learning_rate: float = 2e-4
-    num_epochs: int = 2
+    num_epochs: int = 1
     gradient_accumulation_steps: int = 4
     max_length = 512
-    max_steps = 1 # set to 1 for debug
+    max_steps = -1 # no explicit limit on the number of training steps
 
     checkpoint_freq: int = 1
     checkpoint_dir: str = "checkpoints"

@@ -17,7 +17,7 @@ class LoRAModel:
         else:
             self.dtype = torch.float32
 
-    def setup_model(self, local_rank):
+    def setup_model(self, local_rank, with_lora_init=True):
         # Ensure all processes use the same initialization
         if torch.distributed.is_initialized():
             torch.distributed.barrier()
@@ -43,17 +43,18 @@ class LoRAModel:
         if torch.distributed.is_initialized():
             torch.distributed.barrier()
 
-        lora_config = LoraConfig(
-            r=self.config.lora.rank,
-            lora_alpha=self.config.lora.alpha,
-            lora_dropout=self.config.lora.dropout,
-            bias="none",
-            task_type="CAUSAL_LM",
-            target_modules=self.config.lora.target_modules,
-            init_lora_weights=True,
-        )
+        if with_lora_init:
+            lora_config = LoraConfig(
+                r=self.config.lora.rank,
+                lora_alpha=self.config.lora.alpha,
+                lora_dropout=self.config.lora.dropout,
+                bias="none",
+                task_type="CAUSAL_LM",
+                target_modules=self.config.lora.target_modules,
+                init_lora_weights=True,
+            )
 
-        model = get_peft_model(model, lora_config)
+            model = get_peft_model(model, lora_config)
 
         # Synchronize after LoRA application
         if torch.distributed.is_initialized():
@@ -63,23 +64,16 @@ class LoRAModel:
 
     def load_checkpoint(self, checkpoint_path, local_rank):
         """Load checkpoint with both model and optimizer states"""
-        model, tokenizer = self.setup_model(local_rank)
+        base_model, tokenizer = self.setup_model(local_rank, with_lora_init=False)
 
-        # Load checkpoint to CPU first to avoid GPU memory issues
-        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-
-        # Load model state dict
-        if "model_state_dict" in checkpoint:
-            # When the entire model is saved
-            model.load_state_dict(checkpoint["model_state_dict"], strict=False)
-        elif "lora_state_dict" in checkpoint:
-            print("Loading LoRA weights!")
-            # When only the lora weights are saved
-            model.load_state_dict(checkpoint["lora_state_dict"], strict=False)
-        else:
-            model.load_state_dict(
-                checkpoint, strict=False
-            )  # If checkpoint is just the model state dict
+        # Load via PEFT's method
+        from peft import PeftModel
+        model = PeftModel.from_pretrained(
+            base_model,
+            checkpoint_path,
+            is_trainable=False
+        )
+        model = model.merge_and_unload()
 
         # Move model to appropriate device
         model = model.to(DistributedSetup.get_device(self.hw_config, local_rank))
