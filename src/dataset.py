@@ -139,41 +139,17 @@ class CausalLMDataCollator:
     def __init__(self, tokenizer: PreTrainedTokenizer, max_length: int = 512):
         self.tokenizer = tokenizer
         self.max_length = max_length
-        self.pad_token_id = tokenizer.pad_token_id
 
     def __call__(self, features: List[Dict]) -> Dict:
-        # Get max length in this batch
-        max_len = min(
-            max(len(feature["input_ids"]) for feature in features), self.max_length
+        # The .pad() method respects the tokenizer's padding_side setting.
+        # This will use left-padding as configured in CausalLMMultipleChoiceDataset.
+        # It also handles padding of labels with -100 by default.
+        batch = self.tokenizer.pad(
+            features,
+            padding="longest",  # Pad to longest sequence in batch
+            max_length=self.max_length,
+            return_tensors="pt",
         )
-
-        # Initialize tensors
-        batch = {"input_ids": [], "attention_mask": [], "labels": []}
-
-        for feature in features:
-            # Truncate if necessary
-            input_ids = feature["input_ids"][:max_len]
-            attention_mask = feature["attention_mask"][:max_len]
-            labels = feature["labels"][:max_len]
-
-            # Pad if necessary
-            padding_len = max_len - len(input_ids)
-            if padding_len > 0:
-                input_ids = input_ids + [self.pad_token_id] * padding_len
-                attention_mask = attention_mask + [0] * padding_len
-                labels = labels + [-100] * padding_len
-
-            batch["input_ids"].append(input_ids)
-            batch["attention_mask"].append(attention_mask)
-            batch["labels"].append(labels)
-
-        # Convert to tensors
-        batch = {k: torch.tensor(v) for k, v in batch.items()}
-
-        # Add sequence dimension if necessary
-        if len(batch["input_ids"].shape) == 1:
-            batch = {k: v.unsqueeze(0) for k, v in batch.items()}
-
         return batch
 
 
