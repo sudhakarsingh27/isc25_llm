@@ -38,7 +38,6 @@ class CausalLMMultipleChoiceDataset(Dataset):
         self.max_length = max_length
         self.prompt_config = prompt_config
         self.train = split != "validation"
-        logging.info(f"Set self.train={self.train}")
 
         # Load dataset
         if dataset_name in ["speed_dataset", "accuracy_dataset"]:
@@ -71,10 +70,6 @@ class CausalLMMultipleChoiceDataset(Dataset):
             self.dataset = load_dataset(
                 dataset_name, split=split, trust_remote_code=True
             )
-
-        logging.info(
-            f"The dataset consists of {len(self.dataset)} samples."
-        )
 
         # Set maximum lengths for different parts
         self.max_answer_length = 0

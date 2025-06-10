@@ -87,7 +87,7 @@ class TrainingConfig:
     learning_rate: float = 2e-4
     num_epochs: int = 1
     gradient_accumulation_steps: int = 4
-    max_length = 512
+    max_length = 576
     max_steps = -1 # no explicit limit on the number of training steps
 
     checkpoint_freq: int = 1

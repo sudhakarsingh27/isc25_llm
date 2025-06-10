@@ -74,7 +74,8 @@ def main():
     # Mask the sensitive token in the copy
     config_copy = copy.deepcopy(config)
     config_copy.cache.hf_token = "hf_secret_token"
-    logger.info("Training Configuration:\n%s", pformat(asdict(config_copy)))
+    if local_rank == 0:
+        logger.info("Training Configuration:\n%s", pformat(asdict(config_copy)))
 
     # Setup environment (all ranks need cache dirs, only rank 0 needs auth)
     setup_cache_dir(config, local_rank)
