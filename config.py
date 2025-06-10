@@ -53,7 +53,7 @@ class HardwareConfig:
                 self.device_type = "cpu"
 
         if self.num_devices is None:
-            if self.device_type == "cuda":
+            if self.device_type in ["cuda", "rocm"]:
                 self.num_devices = torch.cuda.device_count()
             elif self.device_type == "xpu":
                 self.num_devices = torch.xpu.device_count()
