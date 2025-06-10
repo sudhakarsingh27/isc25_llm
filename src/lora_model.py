@@ -28,6 +28,9 @@ class LoRAModel:
             tokenizer.eos_token
         )  # Set padding token to be the EOS token
 
+        # Set padding side to left
+        tokenizer.padding_side = "left"
+
         # Set deterministic initialization
         torch.manual_seed(0)
         if torch.cuda.is_available():
