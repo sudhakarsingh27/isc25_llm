@@ -74,9 +74,16 @@ class LoRAModel:
         model = PeftModel.from_pretrained(
             base_model,
             checkpoint_path,
-            is_trainable=False
+            is_trainable=True
         )
-        model = model.merge_and_unload()
+
+        # This line leaves no parameters trainable and DDP cribs later.
+        # In addition, set `is_trainable=True` above to avoid this issue.
+        # model = model.merge_and_unload()
+
+        # Verify trainable parameters exist to
+        trainable_params = sum(p.requires_grad for p in model.parameters())
+        print(f"Trainable parameters after loading: {trainable_params}")
 
         # Move model to appropriate device
         model = model.to(DistributedSetup.get_device(self.hw_config, local_rank))
